@@ -25,6 +25,7 @@ export class ClassroomController {
     @GoogleUser() user: any,
   ) {
     const token = body?.accessToken || tokenFromHeader;
+    const refreshToken = body?.refreshToken;
 
     if (!token) {
       throw new UnauthorizedException('No se proporcionó un Access Token de Google.');
@@ -37,7 +38,7 @@ export class ClassroomController {
       throw new UnauthorizedException('No se pudo identificar al usuario de Google.');
     }
 
-    return await this.classroomService.syncClassroomTasks(token, userId);
+    return await this.classroomService.syncClassroomTasks(token, userId, refreshToken);
   }
 
   @Get()

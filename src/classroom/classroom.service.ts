@@ -1,4 +1,9 @@
-import { Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { google } from 'googleapis';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { ConvexService } from '../convex/convex.service';
@@ -8,10 +13,43 @@ import { anyApi } from 'convex/server';
 export class ClassroomService {
   constructor(private readonly convexService: ConvexService) {}
 
-  async syncClassroomTasks(accessToken: string, userId: string) {
+  private createOAuth2Client(accessToken: string, refreshToken?: string) {
+    const auth = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      process.env.GOOGLE_REDIRECT_URI,
+    );
+
+    auth.setCredentials({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    });
+
+    return auth;
+  }
+
+  async syncClassroomTasks(
+    accessToken: string,
+    userId: string,
+    refreshToken?: string,
+  ) {
+    const auth = this.createOAuth2Client(accessToken, refreshToken);
+
     try {
-      const auth = new google.auth.OAuth2();
-      auth.setCredentials({ access_token: accessToken });
+      // 1. Verificar si el token requiere refresco manual previo
+      if (refreshToken) {
+        try {
+          const tokenInfo = await auth.getTokenInfo(accessToken);
+          if (!tokenInfo) {
+            const { credentials } = await auth.refreshAccessToken();
+            auth.setCredentials(credentials);
+          }
+        } catch {
+          // Si el access_token ya venció, forzamos la renovación
+          const { credentials } = await auth.refreshAccessToken();
+          auth.setCredentials(credentials);
+        }
+      }
 
       const classroom = google.classroom({ version: 'v1', auth });
 
@@ -23,34 +61,48 @@ export class ClassroomService {
       const courses = coursesResponse.data.courses || [];
       let totalSynced = 0;
 
+      // 2. Recorrer cursos con aislamiento de errores
       for (const course of courses) {
         if (!course.id) continue;
 
-        const workResponse = await classroom.courses.courseWork.list({
-          courseId: course.id,
-        });
-
-        const courseWorks = workResponse.data.courseWork || [];
-
-        for (const work of courseWorks) {
-          if (!work.id) continue;
-
-          let dueTimestamp: number | undefined = undefined;
-          if (work.dueDate) {
-            const { year, month, day } = work.dueDate;
-            dueTimestamp = new Date(year || 2026, (month || 1) - 1, day || 1).getTime();
-          }
-
-          await this.convexService.getClient().mutation(anyApi.tasks.upsertTask as any, {
-            userId,
-            externalId: work.id,
-            title: work.title || 'Tarea de Classroom',
-            description: work.description || '',
-            dueDate: dueTimestamp,
-            courseName: course.name || 'Sin materia',
+        try {
+          const workResponse = await classroom.courses.courseWork.list({
+            courseId: course.id,
           });
 
-          totalSynced++;
+          const courseWorks = workResponse.data.courseWork || [];
+
+          for (const work of courseWorks) {
+            if (!work.id) continue;
+
+            let dueTimestamp: number | undefined = undefined;
+            if (work.dueDate) {
+              const { year, month, day } = work.dueDate;
+              dueTimestamp = new Date(
+                year || new Date().getFullYear(),
+                (month || 1) - 1,
+                day || 1,
+              ).getTime();
+            }
+
+            await this.convexService
+              .getClient()
+              .mutation(anyApi.tasks.upsertTask as any, {
+                userId,
+                externalId: work.id,
+                title: work.title || 'Tarea de Classroom',
+                description: work.description || '',
+                dueDate: dueTimestamp,
+                courseName: course.name || 'Sin materia',
+              });
+
+            totalSynced++;
+          }
+        } catch (courseError: any) {
+          // Un error en un curso específico no interrumpe los demás
+          console.warn(
+            `Error al sincronizar el curso "${course.name}" (${course.id}): ${courseError.message}`,
+          );
         }
       }
 
@@ -60,6 +112,12 @@ export class ClassroomService {
         syncedCount: totalSynced,
       };
     } catch (error: any) {
+      if (error.code === 401 || error.status === 401) {
+        throw new UnauthorizedException(
+          'El token de Google ha expirado o es inválido. Vuelve a iniciar sesión.',
+        );
+      }
+
       throw new InternalServerErrorException(
         `Error al sincronizar con Google Classroom: ${error.message}`,
       );
@@ -85,14 +143,13 @@ export class ClassroomService {
 
   async updateTask(taskId: string, userId: string, dto: UpdateTaskDto) {
     try {
-      const result = await this.convexService.getClient().mutation(
-        anyApi.tasks.updateTask as any,
-        {
+      const result = await this.convexService
+        .getClient()
+        .mutation(anyApi.tasks.updateTask as any, {
           taskId,
           userId,
           ...dto,
-        },
-      );
+        });
 
       return {
         success: true,
@@ -101,7 +158,9 @@ export class ClassroomService {
       };
     } catch (error: any) {
       if (error.message?.includes('no encontrada')) {
-        throw new NotFoundException('La tarea no existe o no pertenece al usuario');
+        throw new NotFoundException(
+          'La tarea no existe o no pertenece al usuario',
+        );
       }
       throw new InternalServerErrorException(
         `Error al actualizar la tarea: ${error.message}`,

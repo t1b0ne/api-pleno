@@ -1,12 +1,14 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString } from 'class-validator';
+import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class SyncClassroomDto {
-  @ApiProperty({
-    description: 'OAuth Access Token generado por el cliente mediante Google Login',
-    example: 'ya29.a0AxooC9...',
-  })
+  @ApiPropertyOptional({ description: 'Access Token de Google' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  accessToken: string | undefined;
+  accessToken?: string;
+
+  @ApiPropertyOptional({ description: 'Refresh Token de Google para renovación automática' })
+  @IsOptional()
+  @IsString()
+  refreshToken?: string;
 }

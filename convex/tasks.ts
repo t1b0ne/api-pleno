@@ -8,11 +8,9 @@ function calculateImportance(
 ): number {
   let score = 0;
 
-  // 1. Prioridad Base (Máx 40 pts)
   const priorityScores = { high: 40, medium: 20, low: 10 };
   score += priorityScores[priority] || 10;
 
-  // 2. Urgencia por Fecha Límite (Máx 50 pts)
   if (dueDate) {
     const now = Date.now();
     const msInDay = 1000 * 60 * 60 * 24;
@@ -33,7 +31,6 @@ function calculateImportance(
     }
   }
 
-  // 3. Antigüedad (Máx 10 pts)
   const ageInDays = (Date.now() - createdAt) / (1000 * 60 * 60 * 24);
   const ageBonus = Math.min(10, ageInDays * 0.5);
   score += ageBonus;
@@ -49,8 +46,18 @@ export const getTasksByUser = query({
       .withIndex('by_user', (q) => q.eq('userId', args.userId))
       .collect();
 
-    // 👈 Control defensivo: si no tiene importancia asignada, asume 0 para no romper el sort
     return tasks.sort((a, b) => (b.importanceScore ?? 0) - (a.importanceScore ?? 0));
+  },
+});
+
+export const getTaskById = query({
+  args: { taskId: v.id('tasks'), userId: v.string() },
+  handler: async (ctx, args) => {
+    const task = await ctx.db.get(args.taskId);
+    if (!task || task.userId !== args.userId) {
+      return null;
+    }
+    return task;
   },
 });
 
@@ -59,16 +66,17 @@ export const upsertTask = mutation({
     userId: v.string(),
     externalId: v.string(),
     title: v.string(),
-    description: v.string(),
+    description: v.optional(v.string()),
     dueDate: v.optional(v.number()),
-    courseName: v.string(),
+    courseName: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db
       .query('tasks')
-      .withIndex('by_user', (q) => q.eq('userId', args.userId))
-      .filter((q) => q.eq(q.field('externalId'), args.externalId))
-      .first();
+      .withIndex('by_user_coursework', (q) =>
+        q.eq('userId', args.userId).eq('courseWorkId', args.externalId),
+      )
+      .unique();
 
     const priority = existing ? existing.priority : 'medium';
     const createdAt = existing?.createdAt ?? Date.now();
@@ -77,9 +85,9 @@ export const upsertTask = mutation({
     if (existing) {
       await ctx.db.patch(existing._id, {
         title: args.title,
-        description: args.description,
+        description: args.description ?? '',
         dueDate: args.dueDate,
-        courseName: args.courseName,
+        courseName: args.courseName ?? 'Sin materia',
         importanceScore,
       });
       return existing._id;
@@ -87,11 +95,11 @@ export const upsertTask = mutation({
 
     return await ctx.db.insert('tasks', {
       userId: args.userId,
-      externalId: args.externalId,
+      courseWorkId: args.externalId,
       title: args.title,
-      description: args.description,
+      description: args.description ?? '',
       dueDate: args.dueDate,
-      courseName: args.courseName,
+      courseName: args.courseName ?? 'Sin materia',
       status: 'todo',
       priority,
       source: 'google_classroom',
@@ -105,7 +113,9 @@ export const updateTask = mutation({
   args: {
     taskId: v.id('tasks'),
     userId: v.string(),
-    status: v.optional(v.union(v.literal('todo'), v.literal('in_progress'), v.literal('done'))),
+    status: v.optional(
+      v.union(v.literal('todo'), v.literal('in_progress'), v.literal('completed')),
+    ),
     priority: v.optional(v.union(v.literal('low'), v.literal('medium'), v.literal('high'))),
     dueDate: v.optional(v.number()),
     title: v.optional(v.string()),
@@ -140,6 +150,59 @@ export const updateTask = mutation({
       success: true,
       taskId: args.taskId,
       updatedImportanceScore: importanceScore,
+    };
+  },
+});
+
+export const deleteTask = mutation({
+  args: {
+    taskId: v.id('tasks'),
+    userId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db.get(args.taskId);
+    if (!existing || existing.userId !== args.userId) {
+      throw new Error('Tarea no encontrada o no autorizada');
+    }
+
+    await ctx.db.delete(args.taskId);
+    return { success: true, taskId: args.taskId };
+  }, 
+});
+
+export const createManualTask = mutation({
+  args: {
+    userId: v.string(),
+    title: v.string(),
+    description: v.optional(v.string()),
+    dueDate: v.optional(v.number()),
+    courseName: v.optional(v.string()),
+    priority: v.optional(
+      v.union(v.literal('low'), v.literal('medium'), v.literal('high'))
+    ),
+  },
+  handler: async (ctx, args) => {
+    const priority = args.priority ?? 'medium';
+    const createdAt = Date.now();
+    const importanceScore = calculateImportance(priority, args.dueDate, createdAt);
+
+    const taskId = await ctx.db.insert('tasks', {
+      userId: args.userId,
+      title: args.title,
+      description: args.description ?? '',
+      dueDate: args.dueDate,
+      courseName: args.courseName ?? 'General',
+      status: 'todo',
+      priority,
+      source: 'manual', // Diferencia las tareas creadas a mano de las de Classroom
+      createdAt,
+      importanceScore,
+    });
+
+    return {
+      success: true,
+      taskId,
+      importanceScore,
     };
   },
 });
