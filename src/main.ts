@@ -1,31 +1,35 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // Activación global de validación de DTOs
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+
+  // Configuración de OpenAPI / Swagger
   const config = new DocumentBuilder()
-    .setTitle('Classroom & Tasks Sync API')
-    .setDescription('API de sincronización')
+    .setTitle('Task Manager AI - API')
+    .setDescription('Backend REST con NestJS, Convex BD, Google Classroom e IA')
     .setVersion('1.0')
     .addBearerAuth(
       {
         type: 'http',
         scheme: 'bearer',
         bearerFormat: 'JWT',
-        name: 'Authorization',
-        description: 'Ingresa tu Access Token de Google',
-        in: 'header',
+        description: 'Ingresa tu OAuth Access Token de Google aquí',
       },
-      'google-token',// Nombre de la referencia de seguridad
+      'google-token', // Identificador de seguridad en Swagger
     )
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, document);
+  SwaggerModule.setup('api/docs', app, document);
 
-  const port = process.env.PORT || 3000;
-  await app.listen(port, '0.0.0.0');
+  await app.listen(3000);
+  console.log(`Servidor corriendo en: http://localhost:3000`);
+  console.log(`Documentación Swagger disponible en: http://localhost:3000/api/docs`);
 }
 bootstrap();

@@ -223,3 +223,100 @@ export const createManualTask = mutation({
     };
   },
 });
+
+export const saveTaskAnalysis = mutation({
+  args: {
+    taskId: v.id('tasks'),
+    userId: v.string(),
+    complexity: v.union(v.literal('easy'), v.literal('medium'), v.literal('hard')),
+    estimatedMinutes: v.optional(v.number()),
+    recommendedPriority: v.union(v.literal('low'), v.literal('medium'), v.literal('high')),
+    recommendedStatus: v.optional(
+      v.union(v.literal('todo'), v.literal('in_progress'), v.literal('completed')),
+    ),
+    reasoning: v.string(),
+    confidence: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db.get(args.taskId);
+    if (!existing || existing.userId !== args.userId) {
+      throw new Error('Tarea no encontrada o no autorizada');
+    }
+
+    await ctx.db.patch(args.taskId, {
+      aiComplexity: args.complexity,
+      aiEstimatedMinutes: args.estimatedMinutes,
+      aiRecommendedPriority: args.recommendedPriority,
+      aiRecommendedStatus: args.recommendedStatus,
+      aiReasoning: args.reasoning,
+      aiConfidence: args.confidence,
+      aiAnalyzedAt: Date.now(),
+    });
+
+    return await ctx.db.get(args.taskId);
+  },
+});
+
+export const applyTaskAnalysis = mutation({
+  args: {
+    taskId: v.id('tasks'),
+    userId: v.string(),
+    confirmed: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    if (!args.confirmed) {
+      throw new Error('Se requiere confirmación para aplicar el análisis');
+    }
+
+    const existing = await ctx.db.get(args.taskId);
+    if (!existing || existing.userId !== args.userId) {
+      throw new Error('Tarea no encontrada o no autorizada');
+    }
+
+    if (!existing.aiRecommendedPriority) {
+      throw new Error('La tarea todavía no tiene un análisis para aplicar');
+    }
+
+    const priority = existing.aiRecommendedPriority;
+    const dueDate = existing.dueDate;
+    const createdAt = existing.createdAt ?? Date.now();
+    const importanceScore = calculateImportance(priority, dueDate, createdAt);
+
+    await ctx.db.patch(args.taskId, {
+      priority,
+      status: existing.aiRecommendedStatus ?? existing.status,
+      importanceScore,
+    });
+
+    return await ctx.db.get(args.taskId);
+  },
+});
+
+export const applyTaskDecision = mutation({
+  args: {
+    taskId: v.id('tasks'),
+    userId: v.string(),
+    confirmed: v.boolean(),
+    priority: v.union(v.literal('low'), v.literal('medium'), v.literal('high')),
+    status: v.union(v.literal('todo'), v.literal('in_progress'), v.literal('completed')),
+    importanceScore: v.number(),
+  },
+  handler: async (ctx, args) => {
+    if (!args.confirmed) {
+      throw new Error('Se requiere confirmación para aplicar el análisis');
+    }
+
+    const existing = await ctx.db.get(args.taskId);
+    if (!existing || existing.userId !== args.userId) {
+      throw new Error('Tarea no encontrada o no autorizada');
+    }
+
+    await ctx.db.patch(args.taskId, {
+      priority: args.priority,
+      status: args.status,
+      importanceScore: args.importanceScore,
+    });
+
+    return await ctx.db.get(args.taskId);
+  },
+});

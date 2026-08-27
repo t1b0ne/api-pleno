@@ -29,6 +29,19 @@ export default defineSchema({
     source: v.optional(v.string()),
     createdAt: v.number(),
     importanceScore: v.number(),
+    aiComplexity: v.optional(
+      v.union(v.literal('easy'), v.literal('medium'), v.literal('hard')),
+    ),
+    aiEstimatedMinutes: v.optional(v.number()),
+    aiRecommendedPriority: v.optional(
+      v.union(v.literal('low'), v.literal('medium'), v.literal('high')),
+    ),
+    aiRecommendedStatus: v.optional(
+      v.union(v.literal('todo'), v.literal('in_progress'), v.literal('completed')),
+    ),
+    aiReasoning: v.optional(v.string()),
+    aiConfidence: v.optional(v.number()),
+    aiAnalyzedAt: v.optional(v.number()),
   })
     .index('by_user', ['userId'])
     .index('by_user_coursework', ['userId', 'courseWorkId']),
