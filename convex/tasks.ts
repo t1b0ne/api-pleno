@@ -1,6 +1,18 @@
 import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 
+/**
+ * Sanitiza textos eliminando HTML y normalizando espacios
+ * para optimizar el contexto enviado al agente de IA.
+ */
+function sanitizeText(text?: string): string {
+  if (!text) return '';
+  return text
+    .replace(/<[^>]*>?/gm, '') // Elimina etiquetas HTML
+    .replace(/\s+/g, ' ')       // Convierte múltiples saltos/espacios en un solo espacio
+    .trim();
+}
+
 function calculateImportance(
   priority: 'low' | 'medium' | 'high',
   dueDate?: number,
@@ -82,12 +94,16 @@ export const upsertTask = mutation({
     const createdAt = existing?.createdAt ?? Date.now();
     const importanceScore = calculateImportance(priority, args.dueDate, createdAt);
 
+    const cleanTitle = sanitizeText(args.title);
+    const cleanDescription = sanitizeText(args.description);
+    const cleanCourseName = sanitizeText(args.courseName) || 'Sin materia';
+
     if (existing) {
       await ctx.db.patch(existing._id, {
-        title: args.title,
-        description: args.description ?? '',
+        title: cleanTitle,
+        description: cleanDescription,
         dueDate: args.dueDate,
-        courseName: args.courseName ?? 'Sin materia',
+        courseName: cleanCourseName,
         importanceScore,
       });
       return existing._id;
@@ -96,10 +112,11 @@ export const upsertTask = mutation({
     return await ctx.db.insert('tasks', {
       userId: args.userId,
       courseWorkId: args.externalId,
-      title: args.title,
-      description: args.description ?? '',
+      externalId: args.externalId, // 💡 Guardado para mantener consistencia con el esquema
+      title: cleanTitle,
+      description: cleanDescription,
       dueDate: args.dueDate,
-      courseName: args.courseName ?? 'Sin materia',
+      courseName: cleanCourseName,
       status: 'todo',
       priority,
       source: 'google_classroom',
@@ -141,8 +158,8 @@ export const updateTask = mutation({
     if (args.status !== undefined) updates.status = args.status;
     if (args.priority !== undefined) updates.priority = args.priority;
     if (args.dueDate !== undefined) updates.dueDate = args.dueDate;
-    if (args.title !== undefined) updates.title = args.title;
-    if (args.description !== undefined) updates.description = args.description;
+    if (args.title !== undefined) updates.title = sanitizeText(args.title);
+    if (args.description !== undefined) updates.description = sanitizeText(args.description);
 
     await ctx.db.patch(args.taskId, updates);
 
@@ -167,7 +184,7 @@ export const deleteTask = mutation({
 
     await ctx.db.delete(args.taskId);
     return { success: true, taskId: args.taskId };
-  }, 
+  },
 });
 
 export const createManualTask = mutation({
@@ -178,7 +195,7 @@ export const createManualTask = mutation({
     dueDate: v.optional(v.number()),
     courseName: v.optional(v.string()),
     priority: v.optional(
-      v.union(v.literal('low'), v.literal('medium'), v.literal('high'))
+      v.union(v.literal('low'), v.literal('medium'), v.literal('high')),
     ),
   },
   handler: async (ctx, args) => {
@@ -188,13 +205,13 @@ export const createManualTask = mutation({
 
     const taskId = await ctx.db.insert('tasks', {
       userId: args.userId,
-      title: args.title,
-      description: args.description ?? '',
+      title: sanitizeText(args.title),
+      description: sanitizeText(args.description),
       dueDate: args.dueDate,
-      courseName: args.courseName ?? 'General',
+      courseName: sanitizeText(args.courseName) || 'General',
       status: 'todo',
       priority,
-      source: 'manual', // Diferencia las tareas creadas a mano de las de Classroom
+      source: 'manual',
       createdAt,
       importanceScore,
     });

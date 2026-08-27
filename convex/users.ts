@@ -45,3 +45,40 @@ export const getUserByGoogleId = query({
       .unique();
   },
 });
+
+// Añadir al final de convex/users.ts
+
+export const setClassroomEnabled = mutation({
+  args: {
+    userId: v.string(), // googleId del usuario
+    enabled: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    // Buscar al usuario por su googleId
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_google_id', (q) => q.eq('googleId', args.userId))
+      .first();
+
+    if (!user) {
+      throw new Error('Usuario no encontrado');
+    }
+
+    const updates: Record<string, any> = {
+      classroomEnabled: args.enabled,
+    };
+
+    // Si el usuario acaba de activar la integración, guardamos la marca de tiempo
+    if (args.enabled) {
+      updates.classroomConnectedAt = Date.now();
+    }
+
+    await ctx.db.patch(user._id, updates);
+
+    return {
+      success: true,
+      userId: args.userId,
+      classroomEnabled: args.enabled,
+    };
+  },
+});

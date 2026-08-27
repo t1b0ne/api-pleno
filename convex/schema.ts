@@ -8,7 +8,10 @@ export default defineSchema({
     email: v.string(),
     picture: v.optional(v.string()),
     refreshToken: v.optional(v.string()),
+    tokenExpiresAt: v.optional(v.number()),
     createdAt: v.number(),
+    classroomEnabled: v.optional(v.boolean()),
+    classroomConnectedAt: v.optional(v.number()),
   })
     .index('by_google_id', ['googleId'])
     .index('by_email', ['email']),

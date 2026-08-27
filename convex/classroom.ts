@@ -2,51 +2,87 @@ import { v } from 'convex/values';
 import { action } from './_generated/server';
 import { api } from './_generated/api';
 
+/**
+ * Función auxiliar para realizar peticiones a Google Classroom
+ * manejando automáticamente la paginación de resultados.
+ */
+async function fetchAllPages(url: string, accessToken: string, dataKey: string) {
+  let items: any[] = [];
+  let pageToken: string | undefined = undefined;
+
+  do {
+    const fetchUrl: string = pageToken
+      ? `${url}${url.includes('?') ? '&' : '?'}pageToken=${pageToken}`
+      : url;
+
+    const response = await fetch(fetchUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) break; // Si el curso no tiene tareas asignadas
+      const errorText = await response.text();
+      throw new Error(`Google API Error [${response.status}]: ${errorText}`);
+    }
+
+    const data = await response.json();
+    if (data[dataKey]) {
+      items = items.concat(data[dataKey]);
+    }
+
+    pageToken = data.nextPageToken;
+  } while (pageToken);
+
+  return items;
+}
+
 export const syncClassroomTasks = action({
   args: {
     userId: v.string(),
     accessToken: v.string(),
+    refreshToken: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    // 1. Obtener los cursos activos del usuario desde Google Classroom
-    const coursesResponse = await fetch(
-      'https://classroom.googleapis.com/v1/courses?courseStates=ACTIVE',
-      {
-        headers: { Authorization: `Bearer ${args.accessToken}` },
-      },
+    // 1. Obtener TODOS los cursos activos manejando paginación
+    const courses = await fetchAllPages(
+      'https://classroom.googleapis.com/v1/courses?courseStates=ACTIVE&pageSize=50',
+      args.accessToken,
+      'courses',
     );
 
-    if (!coursesResponse.ok) {
-      const errorData = await coursesResponse.text();
-      throw new Error(`Error de Google Classroom (${coursesResponse.status}): ${errorData}`);
+    if (courses.length === 0) {
+      return { success: true, totalSynced: 0, coursesFound: 0 };
     }
 
-    const coursesData = await coursesResponse.json();
-    const courses = coursesData.courses || [];
+    // 2. Ejecutar consultas en PARALELO para todos los cursos (Promise.all)
+    // En lugar de esperar 1 por 1, se consultan todos a la vez.
+    const courseWorkPromises = courses.map(async (course: any) => {
+      try {
+        const workList = await fetchAllPages(
+          `https://classroom.googleapis.com/v1/courses/${course.id}/courseWork?pageSize=50`,
+          args.accessToken,
+          'courseWork',
+        );
+        return { courseName: course.name, workList };
+      } catch (error) {
+        console.error(`Error al obtener tareas del curso ${course.id}:`, error);
+        return { courseName: course.name, workList: [] };
+      }
+    });
 
+    const coursesResults = await Promise.all(courseWorkPromises);
+
+    // 3. Procesar e insertar en la base de datos de Convex
     let totalSynced = 0;
 
-    // 2. Recorrer cada curso para extraer las tareas (courseWork)
-    for (const course of courses) {
-      const workResponse = await fetch(
-        `https://classroom.googleapis.com/v1/courses/${course.id}/courseWork`,
-        {
-          headers: { Authorization: `Bearer ${args.accessToken}` },
-        },
-      );
-
-      if (!workResponse.ok) continue;
-
-      const workData = await workResponse.json();
-      const courseWorkList = workData.courseWork || [];
-
-      // 3. Guardar o actualizar cada tarea usando tu mutación upsertTask
-      for (const work of courseWorkList) {
+    for (const { courseName, workList } of coursesResults) {
+      for (const work of workList) {
         let dueDate: number | undefined = undefined;
-        if (work.dueDate) {
+
+        if (work.dueDate && work.dueDate.year && work.dueDate.month && work.dueDate.day) {
           const { year, month, day } = work.dueDate;
           const { hours = 23, minutes = 59 } = work.dueTime || {};
-          dueDate = new Date(Date.UTC(year, month - 1, day, hours, minutes)).getTime();
+          dueDate = Date.UTC(year, month - 1, day, hours, minutes);
         }
 
         await ctx.runMutation(api.tasks.upsertTask, {
@@ -55,13 +91,17 @@ export const syncClassroomTasks = action({
           title: work.title,
           description: work.description,
           dueDate,
-          courseName: course.name,
+          courseName,
         });
 
         totalSynced++;
       }
     }
 
-    return { success: true, totalSynced };
+    return {
+      success: true,
+      totalSynced,
+      coursesFound: courses.length,
+    };
   },
 });
