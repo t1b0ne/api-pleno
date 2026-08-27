@@ -4,6 +4,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConvexModule } from './convex/convex.module';
 import { ClassroomModule } from './classroom/classroom.module';
+import { AgentModule } from './agent/agent.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { ClassroomModule } from './classroom/classroom.module';
     }),
     ConvexModule,
     ClassroomModule,
+    AgentModule,
   ],
   controllers: [AppController],
   providers: [AppService],
