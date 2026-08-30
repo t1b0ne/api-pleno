@@ -33,6 +33,9 @@ export class ClassroomController {
     @GoogleToken() accessToken: string,
     @GoogleUser() user: any,
   ) {
-    return await this.classroomService.syncClassroomTasks(accessToken);
+    return await this.classroomService.syncClassroomTasks(
+      accessToken,
+      user?.sub || user?.email || '',
+    );
   }
 }

@@ -2,19 +2,13 @@ import { google } from "@ai-sdk/google";
 
 export const MODELS = {
   primary: google("gemini-3.5-flash-lite"),
-  fallback1: google("gemini-3.5-flash-lite"),
-  fallback2: google("gemini-3.1-flash-lite"),
+  fallback: google("gemini-3.1-flash-lite"),
 } as const;
 
-const FALLBACK_MODELS = [
-  MODELS.primary,
-  MODELS.fallback1,
-  MODELS.fallback2,
-] as const;
+const FALLBACK_MODELS = [MODELS.primary, MODELS.fallback] as const;
+const MODEL_COOLDOWN_MS = 60_000;
 
-// Se conserva durante la vida del proceso. Si un modelo agotó su cuota,
-// no se vuelve a intentar en cada turno y se evita latencia innecesaria.
-const unavailableModels = new Set<string>();
+const unavailableModels = new Map<string, number>();
 
 function modelId(model: { modelId?: string }, index: number): string {
   return model.modelId ?? `model-${index}`;
@@ -36,12 +30,12 @@ function errorDetails(error: unknown) {
 
 function isQuotaError(error: unknown): boolean {
   const details = errorDetails(error);
+  const code = String(details.code ?? "").toUpperCase();
   const text = JSON.stringify({
     ...details,
     cause: error instanceof Error ? error.cause : undefined,
     error,
   }).toLowerCase();
-
   const status = Number(details.status);
 
   return (
@@ -50,8 +44,8 @@ function isQuotaError(error: unknown): boolean {
     status === 502 ||
     status === 503 ||
     status === 504 ||
-    details.code === "RESOURCE_EXHAUSTED" ||
-    details.code === "UNAVAILABLE" ||
+    code === "RESOURCE_EXHAUSTED" ||
+    code === "UNAVAILABLE" ||
     text.includes("resource_exhausted") ||
     text.includes("quotaexceeded") ||
     text.includes("ratelimitexceeded") ||
@@ -61,6 +55,16 @@ function isQuotaError(error: unknown): boolean {
     text.includes("temporarily unavailable") ||
     text.includes("service unavailable")
   );
+}
+
+function errorSummary(error: unknown): string {
+  const details = errorDetails(error);
+  return JSON.stringify({
+    code: details.code,
+    status: details.status,
+    body: details.body,
+    message: details.message,
+  });
 }
 
 type ModelOperation = "doGenerate" | "doStream";
@@ -75,8 +79,10 @@ async function callWithFallback<T>(
   for (let index = 0; index < FALLBACK_MODELS.length; index += 1) {
     const model = FALLBACK_MODELS[index];
     const id = modelId(model, index);
+    const unavailableUntil = unavailableModels.get(id) ?? 0;
 
-    if (unavailableModels.has(id)) continue;
+    if (Date.now() < unavailableUntil) continue;
+    unavailableModels.delete(id);
     attemptedModel = true;
 
     try {
@@ -85,16 +91,19 @@ async function callWithFallback<T>(
       ](options);
     } catch (error) {
       lastError = error;
+      console.warn(`[Nova] Falló ${id}: ${errorSummary(error)}`);
 
       if (!isQuotaError(error)) throw error;
 
-      unavailableModels.add(id);
-      console.warn(`[Nova] ${id} agotó su cuota; pasando al siguiente modelo.`);
+      unavailableModels.set(id, Date.now() + MODEL_COOLDOWN_MS);
+      console.warn(`[Nova] ${id} estará en cooldown durante 60 segundos.`);
     }
   }
 
   if (!attemptedModel) {
-    throw new Error("Todos los modelos configurados están sin cuota o disponibilidad.");
+    throw new Error(
+      "Los modelos están temporalmente en cooldown. Intenta nuevamente en unos segundos.",
+    );
   }
 
   throw lastError ?? new Error("No fue posible ejecutar ningún modelo.");

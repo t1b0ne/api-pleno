@@ -9,6 +9,7 @@
  */
 
 import type * as classroom from "../classroom.js";
+import type * as profiles from "../profiles.js";
 import type * as tasks from "../tasks.js";
 import type * as users from "../users.js";
 
@@ -20,6 +21,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   classroom: typeof classroom;
+  profiles: typeof profiles;
   tasks: typeof tasks;
   users: typeof users;
 }>;

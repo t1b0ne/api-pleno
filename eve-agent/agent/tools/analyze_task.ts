@@ -11,6 +11,22 @@ const taskSchema = z.object({
   status: z.enum(["todo", "in_progress", "completed"]).default("todo"),
 });
 
+const preparedTaskSchema = taskSchema.extend({
+  taskId: z.string(),
+  daysRemaining: z.number().nullable(),
+  hoursRemaining: z.number().nullable(),
+  overdue: z.boolean(),
+  urgency: z.enum(['low', 'medium', 'high', 'overdue']),
+  hasDescription: z.boolean(),
+  descriptionLength: z.number(),
+  nearbyTaskCount: z.number(),
+  dailyWorkloadMinutes: z.number(),
+  weeklyWorkloadMinutes: z.number(),
+  availableMinutesPerDay: z.number(),
+  systemPriority: z.enum(['low', 'medium', 'high']),
+  systemImportance: z.number(),
+});
+
 const profileSchema = z.object({
   occupation: z.string().optional(),
   experienceLevel: z.string().optional(),
@@ -21,25 +37,29 @@ const profileSchema = z.object({
 
 export default defineTool({
   description:
-    "Prepara la tarea seleccionada y el perfil del usuario para que el agente analice complejidad, urgencia, prioridad y estado recomendado. Es una herramienta de solo lectura.",
+    "Prepara la tarea y el perfil para analizar complejidad, urgencia, priorityIA e importanceIA sin alterar priority ni importance del sistema. Es solo lectura.",
   inputSchema: z.object({
-    task: taskSchema,
+    task: taskSchema.optional(),
+    tasks: z.array(preparedTaskSchema).optional(),
     profile: profileSchema.optional(),
   }),
   outputSchema: z.object({
-    task: taskSchema,
+    task: taskSchema.optional(),
+    tasks: z.array(preparedTaskSchema).optional(),
     profile: profileSchema.optional(),
     missingInformation: z.array(z.string()),
     analysisInstructions: z.string(),
   }),
-  execute({ task, profile }) {
+  execute({ task, tasks, profile }) {
     const missingInformation: string[] = [];
 
-    if (!task.description.trim()) {
+    const inputTasks = tasks ?? (task ? [task] : []);
+
+    if (inputTasks.some((item) => !item.description.trim())) {
       missingInformation.push("descripción o criterios de la tarea");
     }
 
-    if (!task.dueDate) {
+    if (inputTasks.some((item) => !item.dueDate)) {
       missingInformation.push("fecha de entrega");
     }
 
@@ -49,6 +69,7 @@ export default defineTool({
 
     return {
       task,
+      tasks,
       profile,
       missingInformation,
       analysisInstructions:
