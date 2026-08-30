@@ -1,6 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { ConvexHttpClient } from 'convex/browser';
 
+describe('ConvexService', () => {
+  it('exports the Convex client type', () => {
+    expect(ConvexHttpClient).toBeDefined();
+  });
+});
+
 @Injectable()
 export class ConvexService {
   private client: ConvexHttpClient;

@@ -1,58 +1,37 @@
 ---
-description: Analiza una tarea seleccionada, estima su complejidad y recomienda prioridad y estado usando el perfil del usuario.
+description: Analiza tareas elegibles usando contexto del usuario y devuelve una evaluación IA separada de la evaluación del sistema.
 ---
 
 # Análisis académico de tareas
 
-Usa este procedimiento después de ejecutar `analyze_task`.
+## 1. Recibir contexto
 
-## 1. Complejidad
+Usa únicamente el perfil, nombre, descripción, fecha, prioridad e importancia del sistema y los indicadores deterministas recibidos. No inventes información.
 
-Clasifica la tarea como `easy`, `medium` o `hard` considerando:
+## 2. Entender al usuario
 
-- Cantidad de pasos.
-- Conocimientos requeridos.
-- Ambigüedad de las instrucciones.
-- Tiempo estimado.
-- Distancia entre la tarea y la experiencia del usuario.
+Considera hábitos, preferencias, carga de trabajo, objetivos, estilo de trabajo, disponibilidad y experiencia. Si no existe un dato, reduce la confianza.
 
-No confundas una fecha cercana con complejidad. La fecha afecta la urgencia.
+## 3. Analizar cada tarea
 
-## 2. Urgencia
+Evalúa pasos, conocimientos requeridos, ambigüedad, duración, fecha de entrega, horas restantes, carga del día, carga semanal y dependencias.
 
-- Vencida: crítica.
-- Vence en 24 horas: muy alta.
-- Vence en 3 días: alta.
-- Vence en 7 días: media.
-- Más de 7 días: normal.
-- Sin fecha: indeterminada; pregunta si es importante.
+## 4. Urgencia e impacto
 
-## 3. Prioridad recomendada
+Vencida: crítica. En 24 horas: muy alta. En 3 días: alta. En 7 días: media. Después: normal. Sin fecha: indeterminada. La fecha afecta urgencia, no complejidad.
 
-Combina complejidad, urgencia, prioridad actual y relación con los objetivos del usuario.
+## 5. Resultados IA independientes
 
-- `high`: urgente, bloqueante, compleja o muy relevante para un objetivo.
-- `medium`: importante, pero puede planificarse.
-- `low`: poco urgente, sencilla o de bajo impacto.
+- `priorityIA`: `low`, `medium` o `high`, combinando urgencia, impacto, complejidad, carga y objetivos.
+- `importanceIA`: número entre 1 y 100 con decimales, reflejando la evaluación personalizada.
+- Nunca sobrescribas `priority` ni `importance`; son los resultados originales del sistema.
+- `complexityScore` debe estar entre 1.0 y 5.0.
+- `recommendedStatus` solo puede ser `todo` o `in_progress` salvo confirmación explícita de finalización.
 
-No sobrescribas automáticamente la prioridad actual. Indica si la recomendación
-es distinta y por qué.
+## 6. Dependencias y confianza
 
-## 4. Estado recomendado
+Propón únicamente dependencias entre tareas recibidas. No propongas una tarea como dependiente de sí misma. Usa confianza entre 0 y 1 y marca `requiresMoreInformation` cuando la evidencia sea insuficiente.
 
-- `todo`: no hay evidencia de avance.
-- `in_progress`: el usuario indicó que comenzó o la tarea requiere trabajo activo.
-- `completed`: únicamente si el usuario confirma que terminó.
+## 7. Respuesta
 
-## 5. Respuesta
-
-Devuelve siempre:
-
-- `complexity`.
-- `urgency`.
-- `recommendedPriority`.
-- `recommendedStatus`.
-- `estimatedMinutes`.
-- `confidence` entre 0 y 1.
-- `reasoning` breve.
-- `questions` si falta información.
+Devuelve siempre JSON válido, breve y accionable con `taskId`, `importanceIA`, `complexityScore`, `estimatedMinutes`, `priorityIA`, `reasoning`, `suggestedAction`, `possibleDependencies`, `confidence`, `requiresMoreInformation` y `missingInformation`.

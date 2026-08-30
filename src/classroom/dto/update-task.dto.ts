@@ -2,10 +2,10 @@ import { IsOptional, IsString, IsIn, IsNumber } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateTaskDto {
-  @ApiPropertyOptional({ enum: ['todo', 'in_progress', 'done'] })
+  @ApiPropertyOptional({ enum: ['todo', 'in_progress', 'completed'] })
   @IsOptional()
-  @IsIn(['todo', 'in_progress', 'done'])
-  status?: 'todo' | 'in_progress' | 'done';
+  @IsIn(['todo', 'in_progress', 'completed'])
+  status?: 'todo' | 'in_progress' | 'completed';
 
   @ApiPropertyOptional({ enum: ['low', 'medium', 'high'] })
   @IsOptional()

@@ -1,83 +1,46 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Param,
-  Patch,
-  Post,
-  Req,
-  UnauthorizedException,
-  UseGuards,
-} from '@nestjs/common';
-import {
-  ApiBearerAuth,
-  ApiOperation,
-  ApiParam,
-  ApiResponse,
-  ApiTags,
-} from '@nestjs/swagger';
-import { AgentService } from './agent.service';
+import { Body, Controller, Post, Query, Req, UnauthorizedException, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { GoogleAuthGuard } from '../common/guards/google-auth.guard';
-import { AnalyzeTaskDto } from './dto/analyze-task.dto';
-import { ApplyAnalysisDto } from './dto/apply-analysis.dto';
+import { AnalysisService } from '../analysis/analysis.service';
+import { PlannerService } from '../planner/planner.service';
 
 @ApiTags('Agent')
 @ApiBearerAuth('google-token')
 @Controller('v1/agent/tasks')
 @UseGuards(GoogleAuthGuard)
 export class AgentController {
-  constructor(private readonly agentService: AgentService) {}
+  constructor(
+    private readonly analysisService: AnalysisService,
+    private readonly plannerService: PlannerService,
+  ) {}
 
-  @Get(':taskId')
-  @ApiOperation({ summary: 'Obtener una tarea para analizarla con el agente' })
-  @ApiParam({ name: 'taskId', description: 'ID del documento de Convex' })
-  @ApiResponse({ status: 200, description: 'Tarea obtenida correctamente.' })
-  @ApiResponse({ status: 401, description: 'Access Token de Google faltante o inválido.' })
-  async getTask(@Param('taskId') taskId: string, @Req() req: any) {
-    return this.agentService.getTask(taskId, this.getUserId(req));
+  @Post('analyze-batch')
+  @ApiOperation({ summary: 'Analizar en una sola llamada las tareas pendientes del usuario' })
+  @ApiQuery({ name: 'force', required: false, type: Boolean })
+  async analyzeBatch(@Req() req: any, @Query('force') force?: string, @Body() body?: { force?: boolean }) {
+    return this.analysisService.analyzeTaskBatch(this.getUserId(req), force === 'true' || body?.force === true);
   }
 
-  @Post(':taskId/analyze')
-  @ApiOperation({ summary: 'Analizar una tarea con el agente eve sin guardar el análisis' })
-  @ApiParam({ name: 'taskId', description: 'ID del documento de Convex' })
-  @ApiResponse({ status: 200, description: 'Análisis generado correctamente.' })
-  @ApiResponse({ status: 401, description: 'Access Token de Google faltante o inválido.' })
-  async analyzeTask(
-    @Param('taskId') taskId: string,
-    @Body() dto: AnalyzeTaskDto,
-    @Req() req: any,
-  ) {
-    return this.agentService.analyzeTask(taskId, this.getUserId(req), dto);
+  @Post('refresh')
+  @ApiOperation({ summary: 'Actualizar análisis, ruta crítica y plan después de cambios en tareas' })
+  @ApiQuery({ name: 'force', required: false, type: Boolean })
+  async refresh(@Req() req: any, @Query('force') force?: string) {
+    const userId = this.getUserId(req);
+    const analysis = await this.analysisService.analyzeSummary(userId, force === 'true');
+    const plan = await this.plannerService.generateWeeklyPlan(userId);
+    return { success: true, analysis, criticalPath: plan.data.criticalPath, plan: plan.data };
   }
 
-  @Patch(':taskId/apply-analysis')
-  @ApiOperation({ summary: 'Aplicar el análisis confirmado sobre la tarea' })
-  @ApiParam({ name: 'taskId', description: 'ID del documento de Convex' })
-  @ApiResponse({ status: 200, description: 'Análisis aplicado correctamente.' })
-  @ApiResponse({ status: 401, description: 'Access Token de Google faltante o inválido.' })
-  async applyAnalysis(
-    @Param('taskId') taskId: string,
-    @Body() dto: ApplyAnalysisDto,
-    @Req() req: any,
-  ) {
-    return this.agentService.applyAnalysis(
-      taskId,
-      this.getUserId(req),
-      dto.confirmed,
-      dto.priority,
-      dto.status,
-      dto.importanceScore,
-    );
+  @Post('agentemasresumen')
+  @ApiOperation({ summary: 'Analizar el resumen determinista junto con el perfil del usuario' })
+  async agenteMasResumen(@Req() req: any) {
+    return this.analysisService.analyzeSummary(this.getUserId(req));
   }
 
   private getUserId(req: any): string {
     const user = req.user || req.googleUser;
     const userId = user?.sub || user?.email;
-
-    if (!userId) {
-      throw new UnauthorizedException('No se pudo identificar al usuario de Google.');
-    }
-
+    if (!userId) throw new UnauthorizedException('No se pudo identificar al usuario de Google.');
     return userId;
   }
 }

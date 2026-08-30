@@ -5,6 +5,9 @@ import { AppService } from './app.service';
 import { ConvexModule } from './convex/convex.module';
 import { ClassroomModule } from './classroom/classroom.module';
 import { AgentModule } from './agent/agent.module';
+import { AnalysisModule } from './analysis/analysis.module';
+import { PlannerModule } from './planner/planner.module';
+import { SummaryModule } from './summary/summary.module';
 
 @Module({
   imports: [
@@ -15,6 +18,9 @@ import { AgentModule } from './agent/agent.module';
     ConvexModule,
     ClassroomModule,
     AgentModule,
+    AnalysisModule,
+    PlannerModule,
+    SummaryModule,
   ],
   controllers: [AppController],
   providers: [AppService],

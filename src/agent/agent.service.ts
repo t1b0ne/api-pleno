@@ -6,7 +6,18 @@ import {
 } from '@nestjs/common';
 import { anyApi } from 'convex/server';
 import { ConvexService } from '../convex/convex.service';
-import { AnalyzeTaskDto } from './dto/analyze-task.dto';
+import { analyzeTaskBySystem } from '../analysis/task-analysis.algorithms';
+
+type TaskAnalysis = {
+  complexity: 'easy' | 'medium' | 'hard';
+  priorityIA: 'low' | 'medium' | 'high';
+  importanceIA?: number;
+  recommendedStatus?: 'todo' | 'in_progress' | 'completed';
+  estimatedMinutes?: number;
+  confidence?: number;
+  reasoning: string;
+  [key: string]: unknown;
+};
 
 @Injectable()
 export class AgentService {
@@ -30,8 +41,13 @@ export class AgentService {
     }
   }
 
-  async analyzeTask(taskId: string, userId: string, dto: AnalyzeTaskDto) {
+  async analyzeTask(taskId: string, userId: string) {
     try {
+      const profile = await this.convexService.getClient().query(
+        anyApi.profiles.getProfile as any,
+        { userId },
+      );
+
       const task = await this.convexService.getClient().query(
         anyApi.tasks.getTaskById as any,
         { taskId, userId },
@@ -43,26 +59,60 @@ export class AgentService {
 
       const prompt = `Analiza la siguiente tarea académica usando la herramienta analyze_task y el skill task-analysis.
 No guardes memoria ni modifiques Convex. Devuelve únicamente JSON válido con estas propiedades:
-complexity, urgency, recommendedPriority, recommendedStatus, importanceScore, estimatedMinutes, confidence, reasoning y questions.
+complexity, urgency, priorityIA, recommendedStatus, importanceIA, estimatedMinutes, confidence, reasoning y questions.
 questions debe ser un arreglo de preguntas concretas para el usuario, por ejemplo cuánto sabe del tema, cuánto tiempo tiene y cuál es su objetivo.
 
 TAREA:
 ${JSON.stringify(task)}
 
-RESPUESTAS DEL USUARIO:
-${JSON.stringify(dto.answers ?? {})}
+PERFIL DEL USUARIO:
+${JSON.stringify(profile ?? {})}
 
-Evalúa complejidad, urgencia, prioridad recomendada, estado recomendado e importanceScore.
+ANÁLISIS DEL SISTEMA (NO MODIFICAR):
+${JSON.stringify(analyzeTaskBySystem(task, Date.now()))}
+
+No incluyas la propiedad questions ni hagas preguntas al usuario. Si falta informaciÃ³n, reduce confidence y explica la limitaciÃ³n en reasoning.
+
+
+Evalúa complejidad, urgencia, priorityIA, estado recomendado e importanceIA.
 Incluye preguntas concretas para conocer cuánto sabe el usuario del tema o qué información falta.
-No marques completed salvo que el usuario lo haya confirmado.`;
+No marques completed salvo que el usuario lo haya confirmado.
+No incluyas la propiedad questions ni hagas preguntas al usuario. Si falta informaciÃƒÂ³n, reduce confidence y explica la limitaciÃƒÂ³n en reasoning.`;
 
       const eveResponse = await this.sendToEve(prompt, taskId);
+      const analysis = this.parseEveAnalysis(eveResponse);
+
+      if (this.isTaskAnalysis(analysis)) {
+        await this.convexService.getClient().mutation(
+          anyApi.tasks.saveTaskAnalysis as any,
+          {
+            taskId,
+            userId,
+            complexity: analysis.complexity,
+            recommendedPriority: analysis.priorityIA,
+            priorityIA: analysis.priorityIA,
+            importanceIA: analysis.importanceIA,
+            reasoning: analysis.reasoning,
+            ...(analysis.estimatedMinutes !== undefined && {
+              estimatedMinutes: analysis.estimatedMinutes,
+            }),
+            ...(analysis.recommendedStatus !== undefined && {
+              recommendedStatus: analysis.recommendedStatus,
+            }),
+            ...(analysis.confidence !== undefined && {
+              confidence: analysis.confidence,
+            }),
+          },
+        );
+      }
+
       return {
         success: true,
         applied: false,
         data: {
           task,
-          analysis: this.parseEveAnalysis(eveResponse),
+          profile,
+          analysis,
           eveResponse,
         },
       };
@@ -161,6 +211,28 @@ No marques completed salvo que el usuario lo haya confirmado.`;
     } catch {
       return { raw: message };
     }
+  }
+
+  private isTaskAnalysis(value: unknown): value is TaskAnalysis {
+    if (!value || typeof value !== 'object') return false;
+
+    const analysis = value as Record<string, unknown>;
+    const validComplexity = ['easy', 'medium', 'hard'].includes(
+      analysis.complexity as string,
+    );
+    const validPriority = ['low', 'medium', 'high'].includes(
+      analysis.priorityIA as string,
+    );
+    const validStatus =
+      analysis.recommendedStatus === undefined ||
+      ['todo', 'in_progress', 'completed'].includes(analysis.recommendedStatus as string);
+
+    return (
+      validComplexity &&
+      validPriority &&
+      validStatus &&
+      typeof analysis.reasoning === 'string'
+    );
   }
 
   async applyAnalysis(
