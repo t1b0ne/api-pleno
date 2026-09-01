@@ -1,5 +1,5 @@
 import { v } from 'convex/values';
-import { mutation, query } from './_generated/server';
+import { mutation, query, internalQuery, internalMutation } from './_generated/server';
 
 export const storeUser = mutation({
   args: {
@@ -80,5 +80,45 @@ export const setClassroomEnabled = mutation({
       userId: args.userId,
       classroomEnabled: args.enabled,
     };
+  },
+});
+
+// convex/users.ts (fragmento de getUsersNeedingSync)
+
+export const getUsersNeedingSync = internalQuery({
+  args: { limit: v.number() },
+  handler: async (ctx, args) => {
+    const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+    const cutoff = Date.now() - SIX_HOURS_MS;
+
+    const allUsers = await ctx.db.query('users').collect();
+
+    return allUsers
+      .filter((u) => {
+        const isEnabled = u.classroomEnabled === true;
+        const hasToken = typeof u.accessToken === 'string' && u.accessToken.length > 0;
+        const isOutdated = !u.lastSyncedAt || u.lastSyncedAt < cutoff;
+
+        return isEnabled && hasToken && isOutdated;
+      })
+      .slice(0, args.limit)
+      .map((u) => ({
+        googleId: u.googleId,
+        accessToken: u.accessToken!, // '!' le confirma a TypeScript que el token no es undefined tras el filtro
+      }));
+  },
+});
+
+export const updateLastSyncedAt = internalMutation({
+  args: { userId: v.string() },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_google_id', (q) => q.eq('googleId', args.userId))
+      .first();
+
+    if (user) {
+      await ctx.db.patch(user._id, { lastSyncedAt: Date.now() });
+    }
   },
 });
