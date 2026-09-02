@@ -5,6 +5,7 @@ import { preprocessTasks, PreprocessedTask } from './task-preprocessor';
 import { taskAnalysisBatchSchema, TaskAnalysisBatch } from './task-analysis.schema';
 import { SummaryService } from '../summary/summary.service';
 import { filterEligibleTasks } from './task-analysis.algorithms';
+import { toProfileContext, UserProfileLike } from '../profile/profile-context';
 
 @Injectable()
 export class AnalysisService {
@@ -87,23 +88,14 @@ export class AnalysisService {
         return { batchAnalysis: { workloadRisk: 'low', summary: 'No hay tareas pendientes.' }, analyzedTasks: 0, reusedTasks: 0, tasks: [] };
       }
 
+      const profileContext = toProfileContext(profile as UserProfileLike | null);
       const prepared = preprocessTasks(eligibleTasks, {
         now,
         availableHoursPerDay: profile?.availableHoursPerDay,
         availableSchedule: profile?.availableSchedule,
         historicalMinutesByTaskType: profile?.averageMinutesByTaskType,
       });
-      const prompt = this.buildBatchPrompt(prepared, profile ? {
-        availableHoursPerDay: profile.availableHoursPerDay,
-        availableSchedule: profile.availableSchedule,
-        studyHoursPerDay: profile.studyHoursPerDay,
-        workHoursPerDay: profile.workHoursPerDay,
-        workloadTolerance: profile.workloadTolerance,
-        energyMorning: profile.energyMorning,
-        energyAfternoon: profile.energyAfternoon,
-        energyNight: profile.energyNight,
-        averageMinutesByTaskType: profile.averageMinutesByTaskType,
-      } : null);
+      const prompt = this.buildBatchPrompt(prepared, profileContext);
       let parsed: ReturnType<typeof taskAnalysisBatchSchema.safeParse> | null = null;
       let lastError = 'Eve no devolvió una respuesta válida';
       for (let attempt = 0; attempt < 2; attempt++) {
@@ -152,7 +144,7 @@ export class AnalysisService {
     }
   }
 
-  private buildBatchPrompt(tasks: PreprocessedTask[], profile: unknown): string {
+  private buildBatchPrompt(tasks: PreprocessedTask[], profile: UserProfileLike | null): string {
     return [
       'Analiza este lote de tareas académicas usando el único agente y devuelve únicamente JSON válido.',
       'No inventes datos. Usa los cálculos deterministas recibidos. No escribas en la base de datos.',
@@ -161,7 +153,8 @@ export class AnalysisService {
       'Prioridad debe considerar urgencia, importancia, complejidad, duración, disponibilidad, carga y dependencias.',
       'Si falta información relevante, reduce confidence, marca requiresMoreInformation=true y enumera missingInformation.',
       'Devuelve batchAnalysis:{workloadRisk,summary} y tasks con taskId, importanceIA, complexityScore, estimatedMinutes, priorityIA, reasoning breve, suggestedAction, possibleDependencies, confidence, requiresMoreInformation y missingInformation.',
-      `PERFIL: ${JSON.stringify(profile ?? {})}`,
+      `PERFIL: ${JSON.stringify(profile)}`,
+      'Si PERFIL es null, indica la falta de perfil en missingInformation y reduce confidence. Si es un objeto, usa todos sus campos disponibles; no inventes los faltantes.',
       `TAREAS PREPROCESADAS: ${JSON.stringify(tasks)}`,
     ].join('\n');
   }

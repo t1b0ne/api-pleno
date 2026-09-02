@@ -28,12 +28,34 @@ const preparedTaskSchema = taskSchema.extend({
 });
 
 const profileSchema = z.object({
+  role: z.string().optional(),
+  age: z.number().optional(),
   occupation: z.string().optional(),
-  experienceLevel: z.string().optional(),
-  skills: z.string().optional(),
-  interests: z.string().optional(),
-  goals: z.string().optional(),
-});
+  availableHoursPerDay: z.number().optional(),
+  availableSchedule: z.array(z.object({
+    day: z.string(),
+    start: z.string(),
+    end: z.string(),
+  })).optional(),
+  workHoursPerDay: z.number().optional(),
+  studyHoursPerDay: z.number().optional(),
+  energyMorning: z.number().optional(),
+  energyAfternoon: z.number().optional(),
+  energyNight: z.number().optional(),
+  preferredActivities: z.array(z.string()).optional(),
+  distractions: z.array(z.string()).optional(),
+  workMethod: z.string().optional(),
+  personalGoals: z.array(z.string()).optional(),
+  learningStyle: z.string().optional(),
+  workloadTolerance: z.number().optional(),
+  declaredFieldNames: z.array(z.string()).optional(),
+  averageMinutesByTaskType: z.record(z.string(), z.number()).optional(),
+  averageEstimationErrorMinutes: z.number().optional(),
+  onTimeCompletionRate: z.number().optional(),
+  averageActualMinutes: z.number().optional(),
+  actualWorkloadTolerance: z.number().optional(),
+  lastBehaviorObservedAt: z.number().optional(),
+}).passthrough();
 
 // Normaliza el caso en que el modelo envía los argumentos como JSON serializado.
 const toolInputSchema = z.preprocess((value) => {
@@ -74,8 +96,10 @@ export default defineTool({
       missingInformation.push("fecha de entrega");
     }
 
-    if (!profile?.experienceLevel) {
-      missingInformation.push("nivel de experiencia del usuario en este tema");
+    if (!profile) {
+      missingInformation.push("perfil del usuario");
+    } else if (!profile.learningStyle && !profile.workMethod && !profile.occupation) {
+      missingInformation.push("contexto de aprendizaje o trabajo del usuario");
     }
 
     return {

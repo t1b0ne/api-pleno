@@ -7,6 +7,7 @@ import {
 import { anyApi } from 'convex/server';
 import { ConvexService } from '../convex/convex.service';
 import { analyzeTaskBySystem } from '../analysis/task-analysis.algorithms';
+import { toProfileContext, UserProfileLike } from '../profile/profile-context';
 
 type TaskAnalysis = {
   complexity: 'easy' | 'medium' | 'hard';
@@ -57,6 +58,7 @@ export class AgentService {
         throw new NotFoundException('La tarea no existe o no pertenece al usuario');
       }
 
+      const profileContext = toProfileContext(profile as UserProfileLike | null);
       const prompt = `Analiza la siguiente tarea académica usando la herramienta analyze_task y el skill task-analysis.
 No guardes memoria ni modifiques Convex. Devuelve únicamente JSON válido con estas propiedades:
 complexity, urgency, priorityIA, recommendedStatus, importanceIA, estimatedMinutes, confidence, reasoning y questions.
@@ -66,7 +68,7 @@ TAREA:
 ${JSON.stringify(task)}
 
 PERFIL DEL USUARIO:
-${JSON.stringify(profile ?? {})}
+${JSON.stringify(profileContext)}
 
 ANÁLISIS DEL SISTEMA (NO MODIFICAR):
 ${JSON.stringify(analyzeTaskBySystem(task, Date.now()))}

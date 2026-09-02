@@ -12,6 +12,7 @@ type PlanTask = {
 type PlanProfile = {
   availableHoursPerDay?: number;
   studyHoursPerDay?: number;
+  actualWorkloadTolerance?: number;
   workloadTolerance?: number;
   availableSchedule?: Array<{ day: string; start: string; end: string }>;
 };
@@ -59,7 +60,8 @@ export function buildWeeklyPlan(
     const dueDelta = (a.dueDate ?? Number.MAX_SAFE_INTEGER) - (b.dueDate ?? Number.MAX_SAFE_INTEGER);
     return dueDelta || (b.estimatedMinutes ?? 0) - (a.estimatedMinutes ?? 0);
   });
-  const dailyCapacity = Math.max(30, Math.floor((profile?.studyHoursPerDay ?? profile?.availableHoursPerDay ?? 2) * 60 * Math.min(0.8, Math.max(0.4, (profile?.workloadTolerance ?? 80) / 100))));
+  const tolerance = profile?.actualWorkloadTolerance ?? profile?.workloadTolerance ?? 80;
+  const dailyCapacity = Math.max(30, Math.floor((profile?.studyHoursPerDay ?? profile?.availableHoursPerDay ?? 2) * 60 * Math.min(0.8, Math.max(0.4, tolerance / 100))));
   const used = new Map<string, number>();
   const completedOnDay = new Map<string, number>();
   const blocks: PlannedBlock[] = [];
