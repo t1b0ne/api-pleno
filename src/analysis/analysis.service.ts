@@ -41,9 +41,11 @@ export class AnalysisService {
           attempt === 0 ? prompt : `${prompt}\nREINTENTO: responde solo JSON válido y compacto.`,
           `summary-analysis-${userId}-${Date.now()}-${attempt + 1}`,
         );
-        parsed = taskAnalysisBatchSchema.safeParse(this.parseJsonRobust(response));
+        parsed = taskAnalysisBatchSchema.safeParse(
+          this.normalizeBatchResponse(this.parseJsonRobust(response)),
+        );
         if (parsed.success) break;
-        lastError = parsed.error.issues[0]?.message ?? 'estructura no válida';
+        lastError = this.formatValidationError(parsed.error.issues[0]);
       } catch (error: any) {
         lastError = error.message;
       }
@@ -106,9 +108,11 @@ export class AnalysisService {
               : `${prompt}\nREINTENTO: responde solo un objeto JSON válido, sin markdown, comas finales ni texto adicional.`,
             `batch-${userId}-${now}-${attempt + 1}`,
           );
-          parsed = taskAnalysisBatchSchema.safeParse(this.parseJsonRobust(response));
+          parsed = taskAnalysisBatchSchema.safeParse(
+            this.normalizeBatchResponse(this.parseJsonRobust(response)),
+          );
           if (parsed.success) break;
-          lastError = parsed.error.issues[0]?.message ?? 'estructura no válida';
+          lastError = this.formatValidationError(parsed.error.issues[0]);
         } catch (error: any) {
           lastError = error.message;
         }
@@ -121,7 +125,7 @@ export class AnalysisService {
           taskIds: eligibleTasks.map((task: { _id: string }) => task._id),
           error: 'La respuesta del agente no cumple el esquema esperado',
         });
-        throw new Error(`Respuesta de Eve inválida: ${parsed.error.issues[0]?.message ?? 'formato desconocido'}`);
+        throw new Error(`Respuesta de Eve inválida: ${this.formatValidationError(parsed.error.issues[0])}`);
       }
 
       const validTaskIds = new Set(eligibleTasks.map((task: { _id: string }) => task._id));
@@ -152,7 +156,7 @@ export class AnalysisService {
       'priority e importance pertenecen al sistema y son inmutables durante este análisis. Devuelve priorityIA e importanceIA como evaluación independiente de Eve.',
       'Prioridad debe considerar urgencia, importancia, complejidad, duración, disponibilidad, carga y dependencias.',
       'Si falta información relevante, reduce confidence, marca requiresMoreInformation=true y enumera missingInformation.',
-      'Devuelve batchAnalysis:{workloadRisk,summary} y tasks con taskId, importanceIA, complexityScore, estimatedMinutes, priorityIA, reasoning breve, suggestedAction, possibleDependencies, confidence, requiresMoreInformation y missingInformation.',
+      'La respuesta raíz debe ser un objeto JSON con batchAnalysis y tasks. batchAnalysis debe ser un objeto JSON con workloadRisk y summary como textos; nunca lo devuelvas como una cadena JSON. tasks debe ser un arreglo. possibleDependencies debe ser un arreglo de objetos {dependsOnTaskId, confidence}; no uses cadenas para las dependencias. Cada tarea debe incluir taskId, importanceIA, complexityScore, estimatedMinutes, priorityIA, reasoning breve, suggestedAction, possibleDependencies, confidence, requiresMoreInformation y missingInformation.',
       `PERFIL: ${JSON.stringify(profile)}`,
       'Si PERFIL es null, indica la falta de perfil en missingInformation y reduce confidence. Si es un objeto, usa todos sus campos disponibles; no inventes los faltantes.',
       `TAREAS PREPROCESADAS: ${JSON.stringify(tasks)}`,
@@ -191,7 +195,6 @@ export class AnalysisService {
         const event = JSON.parse(line) as { type?: string; data?: { message?: string; finishReason?: string; error?: string } };
         if (event.type === 'message.completed' && event.data?.finishReason !== 'tool-calls') {
           finalMessage = event.data.message ?? finalMessage;
-          if (finalMessage) return finalMessage;
         }
         if (event.type === 'step.failed' || event.type === 'turn.failed' || event.type === 'session.failed') throw new Error(event.data?.message ?? event.data?.error ?? 'eve falló');
         if (event.type === 'turn.completed') return finalMessage;
@@ -260,6 +263,29 @@ export class AnalysisService {
       }
     }
     throw new Error('Eve no devolvió JSON válido');
+  }
+
+  private normalizeBatchResponse(value: unknown): unknown {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+
+    const response = value as Record<string, unknown>;
+    const batchAnalysis = response.batchAnalysis;
+    if (typeof batchAnalysis !== 'string') return value;
+
+    try {
+      const parsed = this.parseJsonRobust(batchAnalysis);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? { ...response, batchAnalysis: parsed }
+        : value;
+    } catch {
+      return value;
+    }
+  }
+
+  private formatValidationError(issue: { message?: string; path?: PropertyKey[] } | undefined): string {
+    if (!issue) return 'estructura no válida';
+    const path = issue.path?.length ? ` en ${issue.path.join('.')}` : '';
+    return `${issue.message ?? 'estructura no válida'}${path}`;
   }
 
   private parseJson(message: string): unknown {
