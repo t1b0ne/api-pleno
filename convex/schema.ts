@@ -1,4 +1,4 @@
-import { defineSchema, defineTable } from 'convex/server';
+import { defineSchema, defineTable } from 'convex/server'; 
 import { v } from 'convex/values';
 
 export default defineSchema({
@@ -8,10 +8,17 @@ export default defineSchema({
     email: v.string(),
     picture: v.optional(v.string()),
     refreshToken: v.optional(v.string()),
+    accessToken: v.optional(v.string()),   
     tokenExpiresAt: v.optional(v.number()),
     createdAt: v.number(),
+    
+    // 🆕 Notificaciones Push (Expo)
+    pushToken: v.optional(v.string()),
+
+    // 🆕 Estado de sincronización con Google Classroom
     classroomEnabled: v.optional(v.boolean()),
     classroomConnectedAt: v.optional(v.number()),
+    lastSyncedAt: v.optional(v.number()),
   })
     .index('by_google_id', ['googleId'])
     .index('by_email', ['email']),
@@ -92,7 +99,13 @@ export default defineSchema({
     aiModel: v.optional(v.string()),
     aiAnalyzedAt: v.optional(v.number()),
     analysisStatus: v.optional(
-      v.union(v.literal('pending'), v.literal('analyzed'), v.literal('needs_review'), v.literal('stale'), v.literal('failed')),
+      v.union(
+        v.literal('pending'),
+        v.literal('analyzed'),
+        v.literal('needs_review'),
+        v.literal('stale'),
+        v.literal('failed'),
+      ),
     ),
     analysisVersion: v.optional(v.number()),
     analysisError: v.optional(v.string()),
