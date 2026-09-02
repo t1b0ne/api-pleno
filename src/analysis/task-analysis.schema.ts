@@ -1,9 +1,15 @@
 import { z } from 'zod';
 
-const dependencySchema = z.object({
-  dependsOnTaskId: z.string().min(1),
-  confidence: z.number().min(0).max(1),
-});
+const dependencySchema = z.preprocess(
+  (value) =>
+    typeof value === 'string'
+      ? { dependsOnTaskId: value, confidence: 0.5 }
+      : value,
+  z.object({
+    dependsOnTaskId: z.string().min(1),
+    confidence: z.number().min(0).max(1),
+  }),
+);
 
 export const taskAnalysisBatchSchema = z.object({
   batchAnalysis: z.object({
