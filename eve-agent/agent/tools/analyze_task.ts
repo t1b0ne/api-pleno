@@ -35,14 +35,25 @@ const profileSchema = z.object({
   goals: z.string().optional(),
 });
 
+// Normaliza el caso en que el modelo envía los argumentos como JSON serializado.
+const toolInputSchema = z.preprocess((value) => {
+  if (typeof value !== "string") return value;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed && typeof parsed === "object" ? parsed : value;
+  } catch {
+    return value;
+  }
+}, z.object({
+  task: taskSchema.optional(),
+  tasks: z.array(preparedTaskSchema).optional(),
+  profile: profileSchema.optional(),
+}));
+
 export default defineTool({
   description:
     "Prepara la tarea y el perfil para analizar complejidad, urgencia, priorityIA e importanceIA sin alterar priority ni importance del sistema. Es solo lectura.",
-  inputSchema: z.object({
-    task: taskSchema.optional(),
-    tasks: z.array(preparedTaskSchema).optional(),
-    profile: profileSchema.optional(),
-  }),
+  inputSchema: toolInputSchema,
   outputSchema: z.object({
     task: taskSchema.optional(),
     tasks: z.array(preparedTaskSchema).optional(),
