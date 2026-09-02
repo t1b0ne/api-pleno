@@ -24,9 +24,12 @@ export class AgentController {
   @Post('refresh')
   @ApiOperation({ summary: 'Actualizar análisis, ruta crítica y plan después de cambios en tareas' })
   @ApiQuery({ name: 'force', required: false, type: Boolean })
-  async refresh(@Req() req: any, @Query('force') force?: string) {
+  async refresh(@Req() req: any, @Query('force') force?: string, @Body() body?: { force?: boolean }) {
     const userId = this.getUserId(req);
-    const analysis = await this.analysisService.analyzeSummary(userId, force === 'true');
+    const shouldForce = force === 'true' || body?.force === true;
+    // Comparte el mismo flujo validado por /analyze-batch para mantener un
+    // unico contrato JSON entre la API y Eve.
+    const analysis = await this.analysisService.analyzeTaskBatch(userId, shouldForce);
     const plan = await this.plannerService.generateWeeklyPlan(userId);
     return { success: true, analysis, criticalPath: plan.data.criticalPath, plan: plan.data };
   }

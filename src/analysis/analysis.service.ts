@@ -209,6 +209,32 @@ export class AnalysisService {
   }
 
   private parseJsonRobust(message: string): unknown {
+    const source = message.trim();
+
+    // Eve puede devolver el objeto como una cadena JSON serializada:
+    // "{\"batchAnalysis\":...}". Deserializamos esa capa adicional.
+    try {
+      const direct: unknown = JSON.parse(source);
+      if (typeof direct === 'string') return this.parseJsonRobust(direct);
+      if (direct && typeof direct === 'object') return direct;
+    } catch {
+      // Continuamos con la extracción de objetos cuando hay texto adicional.
+    }
+
+    const withoutMarkdown = source
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```$/i, '')
+      .trim();
+    if (withoutMarkdown !== source) {
+      try {
+        const fenced: unknown = JSON.parse(withoutMarkdown);
+        if (typeof fenced === 'string') return this.parseJsonRobust(fenced);
+        if (fenced && typeof fenced === 'object') return fenced;
+      } catch {
+        // La extracción balanceada de abajo cubre texto antes/después del JSON.
+      }
+    }
+
     const candidates: string[] = [];
     let start = -1;
     let depth = 0;
@@ -233,7 +259,9 @@ export class AnalysisService {
     }
     for (const candidate of candidates) {
       try {
-        return JSON.parse(candidate);
+        const parsed: unknown = JSON.parse(candidate);
+        if (typeof parsed === 'string') return this.parseJsonRobust(parsed);
+        return parsed;
       } catch {
         // Prueba otro objeto balanceado si Eve incluyó texto adicional.
       }
