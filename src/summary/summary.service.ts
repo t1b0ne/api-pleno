@@ -2,6 +2,7 @@ import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { anyApi } from 'convex/server';
 import { ConvexService } from '../convex/convex.service';
 import { calculateCriticalPath } from '../planner/critical-path.service';
+import { toProfileContext, UserProfileLike } from '../profile/profile-context';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -82,7 +83,7 @@ export class SummaryService {
         success: true,
         data: {
           generatedAt: now,
-          userProfile: profile,
+          userProfile: toProfileContext(profile as UserProfileLike | null),
           filters: { excludedCompleted: true, excludedOverdue: true, includedUndated: true },
           totals: {
             tasks: tasks.length,
