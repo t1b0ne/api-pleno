@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pleno - Asistente Académico Inteligente</title>
+    <style>
+        :root {
+            --bg-color: #f7faff;
+            --primary-blue: #70a1ff;
+            --secondary-blue: #1e90ff;
+            --primary-yellow: #ffeaa7;
+            --accent-yellow: #fdcb6e;
+            --text-color: #2d3436;
+            --card-bg: #ffffff;
+            --border-radius: 12px;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+        }
+
+        header {
+            background: linear-gradient(135deg, var(--primary-yellow) 0%, var(--primary-blue) 100%);
+            padding: 3rem 1rem;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 2.8rem;
+            color: #1e272e;
+        }
+
+        header p {
+            font-size: 1.2rem;
+            margin-top: 0.5rem;
+            color: #2f3542;
+        }
+
+        .badge {
+            display: inline-block;
+            background-color: #ffffff;
+            color: var(--text-color);
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            margin-top: 1rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 2rem auto;
+            padding: 0 1.5rem;
+        }
+
+        section {
+            background-color: var(--card-bg);
+            border-radius: var(--border-radius);
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+            border: 1px solid #eccc6833;
+        }
+
+        h2 {
+            color: var(--secondary-blue);
+            border-bottom: 2px solid var(--primary-yellow);
+            padding-bottom: 0.5rem;
+            margin-top: 0;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-top: 1rem;
+        }
+
+        .card {
+            background-color: #f1f2f6;
+            padding: 1.2rem;
+            border-radius: 8px;
+            border-left: 4px solid var(--primary-blue);
+        }
+
+        .card h3 {
+            margin-top: 0;
+            color: #2f3542;
+        }
+
+        ul {
+            padding-left: 1.2rem;
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem;
+            font-size: 0.9rem;
+            color: #747d8c;
+            border-top: 1px solid #dfe4ea;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Pleno</h1>
+        <p>Gestión de Tareas Académicas con Inteligencia Artificial</p>
+        <span class="badge">🎓 Proyecto Escolar / Prototipo Académico</span>
+    </header>
+
+    <div class="container">
+
+        <!-- ¿Qué es la app? -->
+        <section>
+            <h2>Sobre el Proyecto</h2>
+            <p>
+                <strong>Pleno</strong> es una aplicación web y móvil diseñada como un <em>proyecto académico</em> para optimizar la organización del estudio universitario y escolar.
+            </p>
+            <p>
+                La plataforma permite a los estudiantes centralizar sus asignaciones escolares mediante la integración con <strong>Google Classroom</strong>. Además, incorpora un agente virtual (<em>Eve Agent</em>) que analiza las fechas de entrega para estructurar automáticamente planes de estudio optimizados y enviar alertas en tiempo real.
+            </p>
+        </section>
+
+        <!-- Arquitectura del Sistema -->
+        <section>
+            <h2>Arquitectura Tecnológica</h2>
+            <p>El proyecto está diseñado bajo una arquitectura de microservicios e infraestructura ligera altamente escalable:</p>
+            
+            <div class="grid">
+                <div class="card">
+                    <h3>📱 Cliente (Mobile & Web)</h3>
+                    <p>Construido con <strong>React Native (Expo)</strong> y Next.js para ofrecer una experiencia multiplataforma fluida y notificaciones locales.</p>
+                </div>
+                <div class="card">
+                    <h3>⚡ Backend & Base de Datos</h3>
+                    <p>Infraestructura reactiva impulsada por <strong>Convex DB</strong> para sincronización en tiempo real y microservicios complementarios en <strong>NestJS</strong>.</p>
+                </div>
+                <div class="card">
+                    <h3>🔌 Integraciones</h3>
+                    <p>Sincronización automatizada periódica con la <strong>API de Google Classroom</strong> mediante flujo seguro OAuth 2.0.</p>
+                </div>
+                <div class="card">
+                    <h3>🔔 Notificaciones</h3>
+                    <p>Entrega transparente de alertas en tiempo real a dispositivos Android e iOS utilizando <strong>Expo Push Service (FCM/APNs)</strong>.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Uso de Datos / Privacidad -->
+        <section>
+            <h2>Política de Privacidad y Uso de la API de Google</h2>
+            <p>Al ser un proyecto de ámbito exclusivamente escolar y de demostración técnica:</p>
+            <ul>
+                <li><strong>Uso de datos de Google:</strong> Los accesos solicitados a Google Classroom son únicamente de lectura para extraer el listado de tareas pendientes y fechas límite.</li>
+                <li><strong>Almacenamiento:</strong> No compartimos, vendemos ni distribuimos información personal de los usuarios con terceros.</li>
+                <li><strong>Seguridad:</strong> La autenticación se maneja mediante tokens de acceso temporal (OAuth 2.0), almacenados de forma encriptada.</li>
+            </ul>
+        </section>
+
+    </div>
+
+    <footer>
+        <p>&copy; 2026 Pleno - Proyecto de Desarrollo Académico.</p>
+    </footer>
+
+</body>
+</html>
